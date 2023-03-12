@@ -110,7 +110,7 @@ void setup() {
 
   siWire.setPins( 27, 26 );
   setupSynth();
-  changeFrequency(10100000);
+  changeFrequency(7214000);
   
   AudioLogger::instance().begin(Serial, AudioLogger::Error); 
 
@@ -118,16 +118,16 @@ void setup() {
 
   //fir = new FIRSplitterConverter<int16_t>( (float*)&plus_45_120, (float*)&minus_45_120, 120, true );
   //fir = new FIRSplitterConverter<int16_t>( (float*)&coeffs_hilbert_301Taps_44100_150_21000, (float*)&coeffs_delay_301, 301, true );
-  firlsb = new FIRSplitterConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_21000, (float*)&coeffs_delay_501, 501, true );
-  firusb = new FIRSplitterConverter<int16_t>( (float*)&coeffs_delay_501, (float*)&coeffs_hilbert_501Taps_44100_150_21000, 501, true );
+  firlsb = new FIRSplitterConverter<int16_t>( (float*)&coeffs_hilbert_301Taps_44100_150_21000, (float*)&coeffs_delay_301, 301, true );
+  firusb = new FIRSplitterConverter<int16_t>( (float*)&coeffs_delay_301, (float*)&coeffs_hilbert_301Taps_44100_150_21000, 301, true );
   fir = firusb;
   
   lowpass_fir = new FIRConverter<int16_t>( (float*)&lowpass_4KHz, (float*)&lowpass_4KHz, 120 );
   //lowpass_fir = new FIRConverter<int16_t>( (float*)&lowpass_1khz, (float*)&lowpass_1khz, 120 );
   //bandpass_fir = new FIRConverter<int16_t>( (float*)&coeffs_Bandpass_201Taps_44100_500_4000, (float*)&coeffs_Bandpass_201Taps_44100_500_4000, 201 );
   
-  //multi->add( *lowpass_fir );
   multi->add( *fir );
+  multi->add( *lowpass_fir );
   
   // Input/Output Modes
   es_dac_output_t output = (es_dac_output_t) ( DAC_OUTPUT_LOUT1 | DAC_OUTPUT_LOUT2 | DAC_OUTPUT_ROUT1 | DAC_OUTPUT_ROUT2 );
@@ -186,6 +186,8 @@ void loop() {
       Serial.println( "Changed Sideband" );
       multi = new MultiConverter<int16_t>();
       multi->add( *fir );
+      multi->add( *lowpass_fir );
+
     }
   }
   
