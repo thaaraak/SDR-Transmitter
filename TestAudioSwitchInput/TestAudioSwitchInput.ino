@@ -66,14 +66,15 @@ int transmitting = false;
 void loop() 
 {
 
-  copier.copy();
-  
   bounce.update();
 
   if ( bounce.changed() ) 
   {
     setTransmitReceive();
   }
+
+  copier.copy();
+  
 
 }
 
