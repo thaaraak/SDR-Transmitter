@@ -1,5 +1,12 @@
 #include "Bounce2.h"
-#include <si5351.h>
+#include "si5351.h"
+#include "Encoder.h"
+
+#include "AudioTools.h"
+#include "es8388.h"
+#include "FIRConverter.h"
+
+#include "fir_coeffs_501Taps_44100_150_4000.h"
 
 Si5351 *si5351;
 TwoWire wire(0);
@@ -12,8 +19,6 @@ bool sw = false;
 
 Bounce bounce = Bounce();
 
-#include "AudioTools.h"
-#include "es8388.h"
 
 uint16_t sample_rate = 44100;
 uint16_t channels = 2;
@@ -21,9 +26,14 @@ uint16_t bits_per_sample = 16;
 
 I2SStream i2s;
 StreamCopy copier(i2s, i2s); // copies sound into i2s
+FIRAddConverter<int16_t> *fir;
 
 int currentFrequency = -1;
 int lastMult = -1;
+float currentDir = 1.0;
+
+Encoder *encFrequency;
+Encoder *encMenu;
 
 void changeFrequency( int freq )
 {
@@ -87,6 +97,22 @@ void setupSynth()
   si5351->init( SI5351_CRYSTAL_LOAD_8PF, 0, 0);
 }
 
+void setupFIR()
+{
+  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_4000, (float*)&coeffs_delay_501, 501 );
+  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_22000_350_10000, (float*)&coeffs_delay_501, 501 );
+  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_350_10000, (float*)&coeffs_delay_501, 501 );
+  fir->setCorrection(currentDir);
+  
+  //filtered.setFilter(0, new FIR<float>(coeffs_hilbert_251Taps_22000_350_10000));
+  //filtered.setFilter(1, new FIR<float>(coeffs_delay_251));
+}
+
+void setupEncoders()
+{
+    encFrequency = new Encoder(13, 14);
+    encMenu = new Encoder(15, 2);
+}
 
 void setup() 
 {
@@ -99,6 +125,8 @@ void setup()
   setupSynth();
   changeFrequency(14200000);  
 
+  setupEncoders();
+  setupFIR();
 
   // Input/Output Modes
   es_dac_output_t output = (es_dac_output_t) ( DAC_OUTPUT_LOUT1 | DAC_OUTPUT_LOUT2 | DAC_OUTPUT_ROUT1 | DAC_OUTPUT_ROUT2 );
@@ -124,6 +152,7 @@ void setup()
   config.pin_data_rx = 35;
   config.pin_mck = 0;
 
+  fir->setGain(8);
   i2s.begin(config);
   Serial.println("I2S started...");
 
@@ -135,14 +164,18 @@ void setup()
 
   bounce.update();
   setTransmitReceive();
+
 }
 
 int transmitting = false;
+long oldFrequency = -999;
+long oldMenu = -999;
+long oldDir = -999;
 
 void loop() 
 {
 
-  copier.copy();
+  copier.copy( *fir );
 
   bounce.update();
 
@@ -150,6 +183,9 @@ void loop()
   {
     setTransmitReceive();
   }
+
+  readEncoders();
+
 
 }
 
@@ -166,5 +202,54 @@ void setTransmitReceive()
       digitalWrite(AUDIO_SWITCH, HIGH);
       transmitting = false;
     }
+}
+
+
+
+bool readEncoder( Encoder* enc, long& oldpos ) 
+{
+  bool valchanged = false;
+  long newpos = enc->read() / 4;
+  
+  if (newpos != oldpos) {
+    valchanged = true;
+    oldpos = newpos;
+  }
+
+  return valchanged;
+}
+
+void readEncoders() 
+{
+  char buf[30];
+  bool freqchanged;
+  bool menuchanged;
+
+  long newFrequency;
+  long newDir = oldDir;
+  
+  freqchanged = readEncoder( encFrequency, oldFrequency );
+  menuchanged = readEncoder( encMenu, newDir );
+
+  if ( freqchanged )
+  {
+    sprintf( buf, "Freq: %d", oldFrequency );
+    Serial.println( buf );
+  }
+
+  if ( menuchanged )
+  {
+    if ( oldDir > newDir )
+      currentDir -= 0.002;
+    else
+      currentDir += 0.002;
+
+    fir->setCorrection(currentDir);
+    sprintf( buf, "Dir: %7.5f", currentDir );
+
+    Serial.println(buf);
+    oldDir = newDir;
+
+  }
 
 }

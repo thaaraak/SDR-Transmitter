@@ -10,7 +10,8 @@ void setup()
   Serial.begin(115200);
   while(!Serial);
 
- /
+  encFrequency = new Encoder(13, 14);
+  encMenu = new Encoder(15, 2);
 
 }
 
