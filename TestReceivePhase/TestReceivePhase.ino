@@ -7,6 +7,7 @@
 #include "FIRConverter.h"
 
 #include "fir_coeffs_501Taps_44100_150_4000.h"
+#include "fir_coeffs_251Taps_22000_350_6000.h"
 
 Si5351 *si5351;
 TwoWire wire(0);
@@ -14,13 +15,15 @@ TwoWire wireExt(1);
 
 #define AUDIO_SWITCH 21
 #define PTT_PIN 5
+#define USBLSB_PIN 4
 
 bool sw = false;
 
 Bounce bounce = Bounce();
+Bounce usblsb = Bounce();
 
 
-uint16_t sample_rate = 44100;
+uint16_t sample_rate = 22000;
 uint16_t channels = 2;
 uint16_t bits_per_sample = 16;
 
@@ -31,6 +34,7 @@ FIRAddConverter<int16_t> *fir;
 int currentFrequency = -1;
 int lastMult = -1;
 float currentDir = 1.0;
+int directionState = 1;
 
 Encoder *encFrequency;
 Encoder *encMenu;
@@ -99,8 +103,8 @@ void setupSynth()
 
 void setupFIR()
 {
-  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_4000, (float*)&coeffs_delay_501, 501 );
-  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_22000_350_10000, (float*)&coeffs_delay_501, 501 );
+  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_4000, (float*)&coeffs_delay_501, 501 );
+  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_22000_350_6000, (float*)&coeffs_delay_251, 251 );
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_350_10000, (float*)&coeffs_delay_501, 501 );
   fir->setCorrection(currentDir);
   
@@ -159,10 +163,15 @@ void setup()
   Serial.println("Attaching PTT_PIN" );
   bounce.attach( PTT_PIN,INPUT_PULLUP );
   bounce.interval(5);
+  bounce.update();
+
+  Serial.println("Attaching USBLSB_PIN" );
+  usblsb.attach( USBLSB_PIN,INPUT_PULLUP );
+  usblsb.interval(5);
+  usblsb.update();
 
   pinMode(AUDIO_SWITCH, OUTPUT);
 
-  bounce.update();
   setTransmitReceive();
 
 }
@@ -182,6 +191,13 @@ void loop()
   if ( bounce.changed() ) 
   {
     setTransmitReceive();
+  }
+  
+  usblsb.update();
+
+  if ( usblsb.changed() ) 
+  {
+    setUSBLSB();
   }
 
   readEncoders();
@@ -205,6 +221,21 @@ void setTransmitReceive()
 }
 
 
+void setUSBLSB()
+{  
+    int deboucedInput = usblsb.read();
+    if ( deboucedInput == LOW ) 
+    {
+
+      directionState = directionState * -1; 
+      fir->setDirection(directionState );
+
+      Serial.println( "Changing upper/lower" );
+
+    }
+
+    
+}
 
 bool readEncoder( Encoder* enc, long& oldpos ) 
 {
@@ -240,9 +271,9 @@ void readEncoders()
   if ( menuchanged )
   {
     if ( oldDir > newDir )
-      currentDir -= 0.002;
+      currentDir -= 0.0005;
     else
-      currentDir += 0.002;
+      currentDir += 0.0005;
 
     fir->setCorrection(currentDir);
     sprintf( buf, "Dir: %7.5f", currentDir );
