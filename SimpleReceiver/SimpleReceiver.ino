@@ -6,9 +6,17 @@
 #include "es8388.h"
 #include "FIRConverter.h"
 
-//#include "fir_coeffs_501Taps_44100_150_4000.h"
+#include "LiquidCrystal_I2C.h"
+
+#include "fir_coeffs_501Taps_44100_150_4000.h"
 #include "fir_coeffs_251Taps_22000_350_6000.h"
-#include "fir_coeffs_501Taps_22000_350_10000.h"
+//#include "fir_coeffs_501Taps_22000_350_10000.h"
+#include "fir_coeffs_161Taps_44100_200_19000.h"
+
+// Lowpass coefficients for 44.1 kHz
+#include "120-tap-4khz-lowpass.h"
+#include "120-tap-minus-45.h"
+#include "120-tap-plus-45.h"
 
 Si5351 *si5351;
 TwoWire wire(0);
@@ -16,21 +24,24 @@ TwoWire wireExt(1);
 
 #define AUDIO_SWITCH 21
 #define PTT_PIN 5
-#define USBLSB_PIN 4
+#define USBLSB_PIN 12
 
 bool sw = false;
 
 Bounce bounce = Bounce();
 Bounce usblsb = Bounce();
 
+LiquidCrystal_I2C *lcd;
 
-uint16_t sample_rate = 22000;
+uint16_t sample_rate = 44100;
 uint16_t channels = 2;
 uint16_t bits_per_sample = 16;
 
 I2SStream i2s;
 StreamCopy copier(i2s, i2s); // copies sound into i2s
 FIRAddConverter<int16_t> *fir;
+FIRConverter<int16_t> *lowpass_fir;
+MultiConverter<int16_t> *multi;
 
 int currentFrequency = -1;
 int lastMult = -1;
@@ -40,10 +51,26 @@ int directionState = 1;
 Encoder *encFrequency;
 Encoder *encMenu;
 
+void printFrequency()
+{
+  char buf[20];
+
+  int freq = currentFrequency;
+  int millions = freq / 1000000;
+  int thousands = ( freq - millions * 1000000 ) / 1000;
+  int remain = freq % 1000;
+
+  sprintf( buf, "%3d.%03d.%03d %3s", millions, thousands, remain, directionState == 1 ? "USB" : "LSB" );
+  lcd->setCursor(0,0);
+  lcd->print( buf );
+}
+
 void changeFrequency( int freq )
 {
     int mult = 0;
     currentFrequency = freq;
+
+    printFrequency();
 
     if ( freq < 5000000 )
       mult = 150;
@@ -87,13 +114,23 @@ void changeFrequency( int freq )
       si5351->set_phase(SI5351_CLK0, 0);
       si5351->set_phase(SI5351_CLK2, mult);
       si5351->pll_reset(SI5351_PLLA);
-      //si5351->pll_reset(SI5351_PLLB);
       si5351->update_status();
 
       lastMult = mult;
     }
 
 
+}
+
+void setupLCD()
+{
+  
+  lcd = new LiquidCrystal_I2C(0x27,20,2,&wireExt);
+
+  lcd->init();
+  lcd->init();
+  lcd->backlight();
+  lcd->setCursor(0,0);
 }
 
 void setupSynth()
@@ -104,13 +141,21 @@ void setupSynth()
 
 void setupFIR()
 {
-  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_4000, (float*)&coeffs_delay_501, 501 );
-  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_22000_350_6000, (float*)&coeffs_delay_251, 251 );
+
+  multi = new MultiConverter<int16_t>();
+
+  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_4000, (float*)&coeffs_delay_501, 501 );
+  //fir = new FIRAddConverter<int16_t>( (float*)&plus_45_120, (float*)&minus_45_120, 120 );
+  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_22000_350_6000, (float*)&coeffs_delay_251, 251 );
+  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_161Taps_44100_200_19000, (float*)&coeffs_delay_161, 161 );
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_22000_350_10000, (float*)&coeffs_delay_501, 501 );
   fir->setCorrection(currentDir);
 
-  //filtered.setFilter(0, new FIR<float>(coeffs_hilbert_251Taps_22000_350_10000));
-  //filtered.setFilter(1, new FIR<float>(coeffs_delay_251));
+  lowpass_fir = new FIRConverter<int16_t>( (float*)&lowpass_4KHz, (float*)&lowpass_4KHz, 120 );
+  
+  multi->add( *fir );
+  multi->add( *lowpass_fir );
+  
 }
 
 void setupEncoders()
@@ -128,6 +173,7 @@ void setup()
 
   wireExt.setPins( 23, 19 );
   setupSynth();
+  setupLCD();
   changeFrequency(14200000);  
 
   setupEncoders();
@@ -185,7 +231,8 @@ long oldDir = -999;
 void loop() 
 {
 
-  copier.copy( *fir );
+//  copier.copy( *fir );
+  copier.copy(*multi);
 
   bounce.update();
 
@@ -230,7 +277,8 @@ void setUSBLSB()
 
       directionState = directionState * -1; 
       fir->setDirection(directionState );
-
+      printFrequency();
+      
       Serial.println( "Changing upper/lower" );
 
     }
@@ -257,8 +305,8 @@ void readEncoders()
   bool freqchanged;
   bool menuchanged;
 
-  long newFrequency;
   long newDir = oldDir;
+  long newFrequency = oldFrequency;
   
   freqchanged = readEncoder( encFrequency, oldFrequency );
   menuchanged = readEncoder( encMenu, newDir );
@@ -267,6 +315,13 @@ void readEncoders()
   {
     sprintf( buf, "Freq: %d", oldFrequency );
     Serial.println( buf );
+
+    if ( oldFrequency > newFrequency )
+        currentFrequency -= 500;
+    else
+        currentFrequency += 500;
+
+    changeFrequency( currentFrequency );
   }
 
   if ( menuchanged )
