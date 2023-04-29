@@ -9,9 +9,10 @@
 #include "LiquidCrystal_I2C.h"
 
 #include "fir_coeffs_501Taps_44100_150_4000.h"
-#include "fir_coeffs_251Taps_22000_350_6000.h"
+//#include "fir_coeffs_251Taps_22000_350_6000.h"
 //#include "fir_coeffs_501Taps_22000_350_10000.h"
 #include "fir_coeffs_161Taps_44100_200_19000.h"
+#include "fir_coeffs_251Taps_44100_500_21000.h"
 
 // Lowpass coefficients for 44.1 kHz
 #include "120-tap-4khz-lowpass.h"
@@ -25,6 +26,12 @@ TwoWire wireExt(1);
 #define AUDIO_SWITCH 21
 #define PTT_PIN 5
 #define USBLSB_PIN 12
+#define EXT_SDA 23
+#define EXT_SCL 19
+#define FREQ_ENC_A 13
+#define FREQ_ENC_B 14
+#define MENU_ENC_A 15
+#define MENU_ENC_B 2
 
 bool sw = false;
 
@@ -144,7 +151,8 @@ void setupFIR()
 
   multi = new MultiConverter<int16_t>();
 
-  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_4000, (float*)&coeffs_delay_501, 501 );
+  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_44100_500_21000, (float*)&coeffs_delay_251, 251 );
+  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_4000, (float*)&coeffs_delay_501, 501 );
   //fir = new FIRAddConverter<int16_t>( (float*)&plus_45_120, (float*)&minus_45_120, 120 );
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_22000_350_6000, (float*)&coeffs_delay_251, 251 );
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_161Taps_44100_200_19000, (float*)&coeffs_delay_161, 161 );
@@ -160,8 +168,8 @@ void setupFIR()
 
 void setupEncoders()
 {
-    encFrequency = new Encoder(13, 14);
-    encMenu = new Encoder(15, 2);
+    encFrequency = new Encoder(FREQ_ENC_A, FREQ_ENC_B);
+    encMenu = new Encoder(MENU_ENC_A, MENU_ENC_B);
 }
 
 void setup() 
@@ -171,7 +179,7 @@ void setup()
     while(!Serial);
   AudioLogger::instance().begin(Serial, AudioLogger::Error);
 
-  wireExt.setPins( 23, 19 );
+  wireExt.setPins( EXT_SDA, EXT_SCL );
   setupSynth();
   setupLCD();
   changeFrequency(14200000);  
