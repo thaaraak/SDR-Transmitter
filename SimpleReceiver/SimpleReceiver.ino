@@ -23,6 +23,10 @@ Si5351 *si5351;
 TwoWire wire(0);
 TwoWire wireExt(1);
 
+#define TRANSCEIVER
+
+#ifdef TRANSCEIVER
+
 #define AUDIO_SWITCH 21
 #define PTT_PIN 5
 #define USBLSB_PIN 12
@@ -32,6 +36,20 @@ TwoWire wireExt(1);
 #define FREQ_ENC_B 14
 #define MENU_ENC_A 15
 #define MENU_ENC_B 2
+
+#else
+
+#define AUDIO_SWITCH 21
+#define PTT_PIN 5
+#define USBLSB_PIN 4
+#define EXT_SDA 23
+#define EXT_SCL 19
+#define FREQ_ENC_A 12
+#define FREQ_ENC_B 15
+#define MENU_ENC_A 13
+#define MENU_ENC_B 14
+
+#endif
 
 bool sw = false;
 
