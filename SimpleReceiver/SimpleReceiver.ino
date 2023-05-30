@@ -180,7 +180,7 @@ void setupFIR()
   lowpass_fir = new FIRConverter<int16_t>( (float*)&lowpass_4KHz, (float*)&lowpass_4KHz, 120 );
   
   multi->add( *fir );
-  multi->add( *lowpass_fir );
+  //multi->add( *lowpass_fir );
   
 }
 
@@ -210,7 +210,10 @@ void setup()
   es_adc_input_t input = ADC_INPUT_LINPUT2_RINPUT2;
   //  es_adc_input_t input = ADC_INPUT_LINPUT1_RINPUT1;
 
-  wire.setPins( 33, 32 );
+  // Original
+  //wire.setPins( 33, 32 );
+  
+  wire.setPins( 18, 23 );
   
   es8388 codec;
   codec.begin( &wire );
@@ -224,7 +227,13 @@ void setup()
   config.channels = 2;
   config.i2s_format = I2S_STD_FORMAT;
   config.pin_ws = 25;
-  config.pin_bck = 27;
+  
+  // Original
+  //config.pin_bck = 27;
+  
+  // Changed
+  config.pin_bck = 5;
+
   config.pin_data = 26;
   config.pin_data_rx = 35;
   config.pin_mck = 0;
