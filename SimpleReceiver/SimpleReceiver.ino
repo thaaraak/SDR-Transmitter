@@ -1,18 +1,20 @@
 #include "Bounce2.h"
-#include "si5351.h"
-#include "Encoder.h"
-
 #include "AudioTools.h"
 #include "es8388.h"
+#include "Wire.h"
+#include "WiFi.h"
+#include "si5351.h"
+#include "Encoder.h"
 #include "FIRConverter.h"
-
 #include "LiquidCrystal_I2C.h"
 
-#include "fir_coeffs_501Taps_44100_150_4000.h"
-//#include "fir_coeffs_251Taps_22000_350_6000.h"
-//#include "fir_coeffs_501Taps_22000_350_10000.h"
-#include "fir_coeffs_161Taps_44100_200_19000.h"
-#include "fir_coeffs_251Taps_44100_500_21000.h"
+//#include "fir_coeffs_501Taps_44100_150_4000.h"
+#include "fir_coeffs_251Taps_22000_350_6000.h"
+#include "fir_coeffs_501Taps_22000_350_10000.h"
+//#include "fir_coeffs_161Taps_44100_200_19000.h"
+//#include "fir_coeffs_251Taps_44100_500_21000.h"
+#include "fir_coeffs_801Taps_22000_200_10500.h"
+#include "fir_coeffs_161Taps_22000_400_10000.h"
 
 // Lowpass coefficients for 44.1 kHz
 #include "120-tap-4khz-lowpass.h"
@@ -21,25 +23,24 @@
 
 Si5351 *si5351;
 TwoWire wire(0);
-TwoWire wireExt(1);
+//TwoWire wireExt(1);
 
 #define TRANSCEIVER
 
 #ifdef TRANSCEIVER
 
-#define AUDIO_SWITCH 21
+#define AUDIO_SWITCH 42
 #define PTT_PIN 5
 #define USBLSB_PIN 12
-#define EXT_SDA 23
-#define EXT_SCL 19
+#define EXT_SDA 36
+#define EXT_SCL 35
 #define FREQ_ENC_A 13
 #define FREQ_ENC_B 14
 #define MENU_ENC_A 15
-#define MENU_ENC_B 2
+#define MENU_ENC_B 7
 
 #else
 
-#define AUDIO_SWITCH 21
 #define PTT_PIN 5
 #define USBLSB_PIN 4
 #define EXT_SDA 23
@@ -58,14 +59,16 @@ Bounce usblsb = Bounce();
 
 LiquidCrystal_I2C *lcd;
 
-uint16_t sample_rate = 44100;
+uint16_t sample_rate = 22000;
 uint16_t channels = 2;
 uint16_t bits_per_sample = 16;
 
-I2SStream i2s;
-StreamCopy copier(i2s, i2s); // copies sound into i2s
+I2SStream in;
+StreamCopy copier(in, in); 
+
 FIRAddConverter<int16_t> *fir;
 FIRConverter<int16_t> *lowpass_fir;
+FIRConverter<int16_t> *bandpass_fir;
 MultiConverter<int16_t> *multi;
 
 int currentFrequency = -1;
@@ -150,7 +153,7 @@ void changeFrequency( int freq )
 void setupLCD()
 {
   
-  lcd = new LiquidCrystal_I2C(0x27,20,2,&wireExt);
+  lcd = new LiquidCrystal_I2C(0x27,20,2,&wire);
 
   lcd->init();
   lcd->init();
@@ -160,16 +163,18 @@ void setupLCD()
 
 void setupSynth()
 {
-  si5351 = new Si5351( &wireExt );
+  si5351 = new Si5351( &wire );
   si5351->init( SI5351_CRYSTAL_LOAD_8PF, 0, 0);
 }
+
 
 void setupFIR()
 {
 
   multi = new MultiConverter<int16_t>();
 
-  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_44100_500_21000, (float*)&coeffs_delay_251, 251 );
+  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_161Taps_22000_400_10000, (float*)&coeffs_delay_161, 161 );
+  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_44100_500_21000, (float*)&coeffs_delay_251, 251 );
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_4000, (float*)&coeffs_delay_501, 501 );
   //fir = new FIRAddConverter<int16_t>( (float*)&plus_45_120, (float*)&minus_45_120, 120 );
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_22000_350_6000, (float*)&coeffs_delay_251, 251 );
@@ -177,12 +182,26 @@ void setupFIR()
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_22000_350_10000, (float*)&coeffs_delay_501, 501 );
   fir->setCorrection(currentDir);
 
-  lowpass_fir = new FIRConverter<int16_t>( (float*)&lowpass_4KHz, (float*)&lowpass_4KHz, 120 );
+//  lowpass_fir = new FIRConverter<int16_t>( (float*)&lowpass_4KHz, (float*)&lowpass_4KHz, 120 );
+  bandpass_fir = new FIRConverter<int16_t>( (float*)&coeffs_hilbert_161Taps_22000_400_10000, (float*)&coeffs_hilbert_161Taps_22000_400_10000, 161 );
   
+  multi->add( *bandpass_fir );
   multi->add( *fir );
-  //multi->add( *lowpass_fir );
   
 }
+
+/*
+void setupFIR()
+{
+  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_4000, (float*)&coeffs_delay_501, 501 );
+  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_22000_350_10000, (float*)&coeffs_delay_501, 501 );
+  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_44100_500_21000, (float*)&coeffs_delay_251, 251 );
+  fir->setCorrection(currentDir);
+  
+  //filtered.setFilter(0, new FIR<float>(coeffs_hilbert_251Taps_22000_350_10000));
+  //filtered.setFilter(1, new FIR<float>(coeffs_delay_251));
+}
+*/
 
 void setupEncoders()
 {
@@ -190,71 +209,74 @@ void setupEncoders()
     encMenu = new Encoder(MENU_ENC_A, MENU_ENC_B);
 }
 
-void setup() 
+void setupButtons()
 {
-
-  Serial.begin(115200);
-    while(!Serial);
-  AudioLogger::instance().begin(Serial, AudioLogger::Error);
-
-  wireExt.setPins( EXT_SDA, EXT_SCL );
-  setupSynth();
-  setupLCD();
-  changeFrequency(14200000);  
-
-  setupEncoders();
-  setupFIR();
-
-  // Input/Output Modes
-  es_dac_output_t output = (es_dac_output_t) ( DAC_OUTPUT_LOUT1 | DAC_OUTPUT_LOUT2 | DAC_OUTPUT_ROUT1 | DAC_OUTPUT_ROUT2 );
-  es_adc_input_t input = ADC_INPUT_LINPUT2_RINPUT2;
-  //  es_adc_input_t input = ADC_INPUT_LINPUT1_RINPUT1;
-
-  // Original
-  //wire.setPins( 33, 32 );
-  
-  wire.setPins( 18, 23 );
-  
-  es8388 codec;
-  codec.begin( &wire );
-  codec.config( bits_per_sample, output, input, 90 );
-
-  // start I2S in
-  Serial.println("starting I2S...");
-  auto config = i2s.defaultConfig(RXTX_MODE);
-  config.sample_rate = sample_rate; 
-  config.bits_per_sample = bits_per_sample; 
-  config.channels = 2;
-  config.i2s_format = I2S_STD_FORMAT;
-  config.pin_ws = 25;
-  
-  // Original
-  //config.pin_bck = 27;
-  
-  // Changed
-  config.pin_bck = 5;
-
-  config.pin_data = 26;
-  config.pin_data_rx = 35;
-  config.pin_mck = 0;
-
-  fir->setGain(8);
-  i2s.begin(config);
-  Serial.println("I2S started...");
-
+  /*
   Serial.println("Attaching PTT_PIN" );
   bounce.attach( PTT_PIN,INPUT_PULLUP );
   bounce.interval(5);
   bounce.update();
+*/
 
   Serial.println("Attaching USBLSB_PIN" );
   usblsb.attach( USBLSB_PIN,INPUT_PULLUP );
   usblsb.interval(5);
   usblsb.update();
 
-  pinMode(AUDIO_SWITCH, OUTPUT);
 
-  setTransmitReceive();
+}
+
+void setupI2S()
+{
+  // Input/Output Modes
+  es_dac_output_t output = (es_dac_output_t) ( DAC_OUTPUT_LOUT1 | DAC_OUTPUT_LOUT2 | DAC_OUTPUT_ROUT1 | DAC_OUTPUT_ROUT2 );
+  //es_adc_input_t input = ADC_INPUT_LINPUT2_RINPUT2;
+  es_adc_input_t input = ADC_INPUT_LINPUT1_RINPUT1;
+
+  es8388 codec;
+
+  codec.begin( &wire );
+  codec.config( bits_per_sample, output, input, 90 );
+
+  // start I2S in
+  auto config = in.defaultConfig(RXTX_MODE);
+  config.sample_rate = sample_rate;
+  config.bits_per_sample = bits_per_sample;
+  config.i2s_format = I2S_STD_FORMAT;
+  config.is_master = true;
+  config.port_no = 0;
+  config.pin_ws = 20;
+  config.pin_bck = 47;
+  config.pin_data = 21;
+  config.pin_data_rx = 19;
+  config.pin_mck = 45;
+  config.use_apll = true;  
+  in.begin(config);
+
+  fir->setGain(4);
+}
+
+
+void setup() 
+{
+
+  Serial.begin(115200);
+  AudioLogger::instance().begin(Serial, AudioLogger::Error);
+
+  wire.setPins( 36, 35 );
+
+  setupFIR();
+  setupI2S();
+  setupSynth();
+  setupLCD();
+  
+  changeFrequency(14200000);  
+
+  setupEncoders();
+  setupButtons();
+  
+  //pinMode(AUDIO_SWITCH, OUTPUT);
+  //setTransmitReceive();
 
 }
 
@@ -263,30 +285,7 @@ long oldFrequency = -999;
 long oldMenu = -999;
 long oldDir = -999;
 
-void loop() 
-{
 
-//  copier.copy( *fir );
-  copier.copy(*multi);
-
-  bounce.update();
-
-  if ( bounce.changed() ) 
-  {
-    setTransmitReceive();
-  }
-  
-  usblsb.update();
-
-  if ( usblsb.changed() ) 
-  {
-    setUSBLSB();
-  }
-
-  readEncoders();
-
-
-}
 
 void setTransmitReceive()
 {
@@ -359,6 +358,7 @@ void readEncoders()
     changeFrequency( currentFrequency );
   }
 
+
   if ( menuchanged )
   {
     if ( oldDir > newDir )
@@ -373,5 +373,33 @@ void readEncoders()
     oldDir = newDir;
 
   }
+
+}
+
+
+void loop() 
+{
+
+/*
+  bounce.update();
+
+  if ( bounce.changed() ) 
+  {
+    setTransmitReceive();
+  }
+ */
+  
+  usblsb.update();
+
+  if ( usblsb.changed() ) 
+  {
+    setUSBLSB();
+  }
+
+  readEncoders();
+
+  copier.copy(*multi);
+//  copier.copy( *fir );
+
 
 }
