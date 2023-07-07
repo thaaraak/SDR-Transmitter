@@ -173,13 +173,13 @@ void setupFIR()
 
   multi = new MultiConverter<int16_t>();
 
-  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_161Taps_22000_400_10000, (float*)&coeffs_delay_161, 161 );
+  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_161Taps_22000_400_10000, (float*)&coeffs_delay_161, 161 );
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_44100_500_21000, (float*)&coeffs_delay_251, 251 );
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_44100_150_4000, (float*)&coeffs_delay_501, 501 );
   //fir = new FIRAddConverter<int16_t>( (float*)&plus_45_120, (float*)&minus_45_120, 120 );
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_251Taps_22000_350_6000, (float*)&coeffs_delay_251, 251 );
   //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_161Taps_44100_200_19000, (float*)&coeffs_delay_161, 161 );
-  //fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_22000_350_10000, (float*)&coeffs_delay_501, 501 );
+  fir = new FIRAddConverter<int16_t>( (float*)&coeffs_hilbert_501Taps_22000_350_10000, (float*)&coeffs_delay_501, 501 );
   fir->setCorrection(currentDir);
 
 //  lowpass_fir = new FIRConverter<int16_t>( (float*)&lowpass_4KHz, (float*)&lowpass_4KHz, 120 );
